@@ -1,0 +1,5 @@
+node_modules/
+dist/
+kaldi-code
+.env
+*.tsbuildinfo
