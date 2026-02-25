@@ -1,11 +1,11 @@
-import type { StreamEvent, Message, ToolSchema, ContentBlock } from "../types/index.js";
+import type { StreamEvent, Message, ToolSchema } from "../types/index.js";
 import { BaseProvider } from "./base.js";
 
 export class OllamaProvider extends BaseProvider {
   readonly name = "ollama";
   readonly supportsTools = true;
 
-  formatTools(tools: ToolSchema[]): unknown {
+  private formatTools(tools: ToolSchema[]): unknown {
     return tools.map((t) => ({
       type: "function",
       function: {
@@ -16,7 +16,7 @@ export class OllamaProvider extends BaseProvider {
     }));
   }
 
-  formatMessages(messages: Message[], systemPrompt: string): unknown {
+  private formatMessages(messages: Message[], systemPrompt: string): unknown {
     const formatted: Record<string, unknown>[] = [
       { role: "system", content: systemPrompt },
     ];

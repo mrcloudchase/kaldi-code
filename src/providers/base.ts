@@ -21,9 +21,6 @@ export abstract class BaseProvider {
     signal: AbortSignal,
   ): AsyncGenerator<StreamEvent>;
 
-  abstract formatTools(tools: ToolSchema[]): unknown;
-  abstract formatMessages(messages: Message[], systemPrompt: string): unknown;
-
   protected async *parseSSE(
     reader: ReadableStreamDefaultReader<Uint8Array>,
   ): AsyncGenerator<{ event: string; data: string }> {

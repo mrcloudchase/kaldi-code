@@ -1,11 +1,11 @@
-import type { StreamEvent, Message, ToolSchema, ContentBlock } from "../types/index.js";
+import type { StreamEvent, Message, ToolSchema } from "../types/index.js";
 import { BaseProvider } from "./base.js";
 
 export class AnthropicProvider extends BaseProvider {
   readonly name = "anthropic";
   readonly supportsTools = true;
 
-  formatTools(tools: ToolSchema[]): unknown {
+  private formatTools(tools: ToolSchema[]): unknown {
     return tools.map((t) => ({
       name: t.name,
       description: t.description,
@@ -13,7 +13,7 @@ export class AnthropicProvider extends BaseProvider {
     }));
   }
 
-  formatMessages(messages: Message[], systemPrompt: string): unknown {
+  private formatMessages(messages: Message[], systemPrompt: string): unknown {
     return {
       model: this.config.model,
       max_tokens: this.config.maxTokens,

@@ -70,13 +70,4 @@ export class PlanTool extends BaseTool {
         : "";
     return header + items + progress;
   }
-
-  // For session persistence
-  getState(): Plan | null {
-    return this.plan;
-  }
-
-  setState(plan: Plan | null): void {
-    this.plan = plan;
-  }
 }

@@ -1,25 +1,31 @@
+import { EventEmitter } from "node:events";
 import type {
   Message,
   ContentBlock,
-  TextBlock,
   ToolUseBlock,
   ToolResultBlock,
-  StreamEvent,
-  TokenUsage,
+  AgentEvent,
 } from "../types/index.js";
 import type { BaseProvider } from "../providers/base.js";
 import type { ToolRegistry } from "../tools/registry.js";
 import type { BaseSafety } from "../safety/base.js";
 import { buildSystemPrompt } from "../prompts/system.js";
 import { countInputTokens, countOutputTokens } from "../utils/tokens.js";
-import { BaseAgent } from "./base.js";
+import { parseStream } from "./parse-stream.js";
 
-export class AgentLoop extends BaseAgent {
+export class AgentLoop extends EventEmitter {
+  private messages: Message[] = [];
+  private provider: BaseProvider;
+  private tools: ToolRegistry;
+  private safety: BaseSafety;
   private abortController: AbortController | null = null;
   private systemPrompt: string;
 
   constructor(provider: BaseProvider, tools: ToolRegistry, safety: BaseSafety) {
-    super(provider, tools, safety);
+    super();
+    this.provider = provider;
+    this.tools = tools;
+    this.safety = safety;
     this.systemPrompt = buildSystemPrompt(process.cwd());
   }
 
@@ -34,7 +40,23 @@ export class AgentLoop extends BaseAgent {
         const schemas = this.tools.buildSchemas();
         const inputTokens = countInputTokens(this.messages, this.systemPrompt, schemas);
 
-        const { contentBlocks } = await this.streamTurn();
+        this.abortController = new AbortController();
+        this.emitEvent({ type: "status_change", status: "streaming" });
+
+        const contentBlocks = await parseStream(
+          this.provider.stream(
+            this.messages,
+            this.systemPrompt,
+            schemas,
+            this.abortController.signal,
+          ),
+          {
+            onTextDelta: (text) => this.emitEvent({ type: "text_delta", text }),
+            onTextComplete: (text) => this.emitEvent({ type: "text_complete", text }),
+          },
+        );
+
+        this.abortController = null;
 
         // Count output tokens from the response
         const outputTokens = countOutputTokens(contentBlocks);
@@ -117,77 +139,31 @@ export class AgentLoop extends BaseAgent {
     }
   }
 
-  private async streamTurn(): Promise<{
-    contentBlocks: ContentBlock[];
-  }> {
-    this.abortController = new AbortController();
-    const schemas = this.tools.buildSchemas();
-
-    this.emitEvent({ type: "status_change", status: "streaming" });
-
-    const contentBlocks: ContentBlock[] = [];
-    let currentText = "";
-    let currentToolUse: ToolUseBlock | null = null;
-    let jsonAccumulator = "";
-
-    for await (const event of this.provider.stream(
-      this.messages,
-      this.systemPrompt,
-      schemas,
-      this.abortController.signal,
-    )) {
-      switch (event.type) {
-        case "text_delta":
-          currentText += event.text;
-          this.emitEvent({ type: "text_delta", text: event.text });
-          break;
-
-        case "tool_use_start":
-          // Flush any accumulated text
-          if (currentText) {
-            contentBlocks.push({ type: "text", text: currentText });
-            this.emitEvent({ type: "text_complete", text: currentText });
-            currentText = "";
-          }
-          currentToolUse = {
-            type: "tool_use",
-            id: event.id,
-            name: event.name,
-            input: {},
-          };
-          jsonAccumulator = "";
-          break;
-
-        case "tool_input_delta":
-          jsonAccumulator += event.partialJson;
-          break;
-
-        case "tool_use_end":
-          if (currentToolUse) {
-            currentToolUse.input = event.input;
-            contentBlocks.push(currentToolUse);
-            currentToolUse = null;
-            jsonAccumulator = "";
-          }
-          break;
-
-        case "message_end":
-          // We no longer use provider-reported usage; we count locally
-          break;
-      }
-    }
-
-    // Flush remaining text
-    if (currentText) {
-      contentBlocks.push({ type: "text", text: currentText });
-      this.emitEvent({ type: "text_complete", text: currentText });
-    }
-
-    this.abortController = null;
-    return { contentBlocks };
-  }
-
   abort(): void {
     this.abortController?.abort();
+  }
+
+  getMessages(): Message[] {
+    return [...this.messages];
+  }
+
+  setMessages(msgs: Message[]): void {
+    this.messages = [...msgs];
+  }
+
+  clearMessages(): void {
+    this.messages = [];
+  }
+
+  setProvider(provider: BaseProvider): void {
+    this.provider = provider;
+  }
+
+  getProvider(): BaseProvider {
+    return this.provider;
+  }
+
+  private emitEvent(event: AgentEvent): void {
+    this.emit("event", event);
   }
 }

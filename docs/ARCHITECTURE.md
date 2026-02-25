@@ -25,7 +25,6 @@ React/Ink UI Layer:
     ├── <StreamingText />    Live token-by-token text
     ├── <ToolCall />         Active tool with spinner
     ├── <Spinner />          Thinking indicator
-    ├── <InputPrompt />      User input (disabled during agent run)
     └── <StatusBar />        Provider, model, tokens, session ID
 ```
 
@@ -44,9 +43,9 @@ BaseProvider (abstract)
 
 **Key methods:**
 - `stream(messages, systemPrompt, tools, signal)` → `AsyncGenerator<StreamEvent>`
-- `formatTools(tools)` → provider-specific tool format
-- `formatMessages(messages, systemPrompt)` → provider-specific message format
 - `parseSSE(reader)` → shared SSE line parser (used by Anthropic + OpenAI)
+
+Each provider has private `formatTools()` and `formatMessages()` methods for converting to wire format.
 
 **StreamEvent types:**
 ```typescript
@@ -103,22 +102,25 @@ Used by:
 - **WebFetchTool**: fetches a URL, converts HTML → Markdown, uses inner LLM to summarize/extract.
 - **DelegateTool**: spawns a `SubAgentRunner` with its own context window.
 
-### BaseAgent (`src/agent/base.ts`)
+### Agent System (`src/agent/`)
 
-Defines the agent contract. Extends `EventEmitter` to bridge with the React UI.
+The agent system has no shared abstract base class. Both agents use a shared `parseStream()` function (`src/agent/parse-stream.ts`) to convert `StreamEvent` streams into `ContentBlock[]`.
 
 ```
-BaseAgent (abstract, extends EventEmitter)
-├── AgentLoop        Primary agent — emits events to UI, runs agentic while-loop
-└── SubAgentRunner   Lightweight — runs silently, returns final text result
+AgentLoop            Extends EventEmitter, emits events to UI, runs agentic while-loop
+SubAgentRunner       Standalone class — runs silently, returns final text result
+parseStream()        Shared stream-to-ContentBlock parser with optional callbacks
 ```
 
-**Key methods:**
-- `sendMessage(text)` — abstract. Starts the agentic loop.
-- `abort()` — abstract. Cancels the current operation.
+**AgentLoop key methods:**
+- `sendMessage(text)` — starts the agentic loop.
+- `abort()` — cancels the current operation.
 - `setProvider(provider)` — swap provider at runtime.
 - `getMessages() / setMessages() / clearMessages()` — message history management.
-- `emitEvent(event)` — emit typed `AgentEvent` for the UI.
+
+**SubAgentRunner key methods:**
+- `run(task)` — runs the sub-agent loop silently, returns final text.
+- `abort()` — cancels the current operation.
 
 ### BaseSafety (`src/safety/base.ts`)
 
@@ -251,12 +253,13 @@ The `DelegateTool` uses a dynamic `import()` for `SubAgentRunner` to avoid circu
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| Abstract base classes | Every subsystem has one | Extensible without modifying consumers; shared logic lives once |
+| Abstract base classes | Providers, tools, safety, storage | Extensible without modifying consumers; shared logic lives once |
 | Raw `fetch` per provider | No SDKs | Minimal deps, full streaming control, consistent approach |
 | Normalized StreamEvent | Single event type across providers | Agent loop is completely provider-agnostic |
 | BaseTool.execute() wraps run() | Shared validation + error handling | Subclasses only implement core logic |
 | LLMTool base class | Inner LLM calls from tools | Enables summarization, analysis without agent involvement |
 | Sub-agents via DelegateTool | Fresh context, maxTurns limit | Keeps primary context clean; prevents runaway agents |
+| Shared parseStream() | Stream→ContentBlock parser | Eliminates duplication between AgentLoop and SubAgentRunner |
 | EventEmitter → React hooks | useAgent bridges the gap | Agent testable in isolation; events drive UI state |
 | Ink Static for completed turns | Never re-rendered | Performance stays constant as conversation grows |
 | JSON file sessions | Simple, inspectable | Swap to SQLite later without touching SessionManager |
@@ -267,7 +270,7 @@ The `DelegateTool` uses a dynamic `import()` for `SubAgentRunner` to avoid circu
 ### Add a new provider
 
 1. Create `src/providers/my-provider.ts` extending `BaseProvider`
-2. Implement `stream()`, `formatTools()`, `formatMessages()`
+2. Implement `stream()` (and private `formatTools()`/`formatMessages()` as needed)
 3. Add to `createProvider()` factory in `src/providers/index.ts`
 4. Add defaults to `src/config/defaults.ts`
 

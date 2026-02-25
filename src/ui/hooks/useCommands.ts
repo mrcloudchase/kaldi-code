@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import type { ProviderConfig } from "../../types/index.js";
 import { createProvider } from "../../providers/index.js";
-import { PROVIDER_DEFAULTS } from "../../config/defaults.js";
+import { PROVIDER_DEFAULTS, getApiKey } from "../../config/index.js";
 import type { AgentLoop } from "../../agent/loop.js";
 import type { SessionManager } from "../../session/manager.js";
 
@@ -125,15 +125,4 @@ export function useCommands(handlers: CommandHandlers): UseCommandsReturn {
   );
 
   return { handleInput };
-}
-
-function getApiKey(provider: string): string | undefined {
-  switch (provider) {
-    case "anthropic":
-      return process.env.ANTHROPIC_API_KEY;
-    case "openai":
-      return process.env.OPENAI_API_KEY;
-    default:
-      return undefined;
-  }
 }

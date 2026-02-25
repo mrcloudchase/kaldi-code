@@ -74,7 +74,6 @@ All three providers (Anthropic, OpenAI, Ollama) normalize their streaming output
 - The `providerFactory` closure in `index.tsx` ensures LLM tools always get the *current* provider, even after a `/provider` switch at runtime.
 - `agentLoop.setProvider()` is monkey-patched in `index.tsx` to keep the `currentProvider` reference in sync.
 - Token counting uses `@dqbd/tiktoken` (`cl100k_base`) locally, ignoring provider-reported usage.
-- `src/ui/InputPrompt.tsx` exists but is unused — input is inline in `App.tsx`.
 
 ## Conventions
 
@@ -82,5 +81,5 @@ All three providers (Anthropic, OpenAI, Ollama) normalize their streaming output
 - `BaseTool.execute()` always returns `Promise<string>` — errors are caught and returned as `"error: ..."` strings, never thrown.
 - Tool safety is declared as `"safe"` or `"unsafe"` on each tool class. File-mutating tools (write, edit, bash) are `"unsafe"`.
 - Provider message format is provider-agnostic (`Message` with `ContentBlock[]`); each provider converts in `formatMessages()`.
-- The `PlanTool` holds state in memory (not persisted across sessions despite having `getState()`/`setState()`).
+- The `PlanTool` holds state in memory (not persisted across sessions).
 - Slash commands are handled in `useCommands` hook before reaching the agent — return `true` = handled, `false` = pass to agent.
